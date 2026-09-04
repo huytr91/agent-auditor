@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-__NONCE__';" />
+  <title>CONNECT MODEL</title>
+  <style>
+    :root { --ink:#152821; --line:#dbe5e0; --muted:#687b73; --green:#087356; }
+    * { box-sizing: border-box; }
+    html, body { margin:0; height:100%; background:#eef3f0; color:var(--ink); font-family:"Segoe UI",Arial,sans-serif; }
+    .wrap { max-width:560px; margin:24px auto; background:#fff; border-radius:15px; overflow:hidden; box-shadow:0 18px 50px #10211733; }
+    header { padding:22px 24px 17px; border-bottom:1px solid var(--line); }
+    header small { font-size:10px; letter-spacing:.13em; color:#849087; }
+    h2 { font-size:22px; margin:6px 0; }
+    header p { font-size:13px; color:#718078; margin:0; }
+    .list { padding:10px; max-height:calc(100vh - 180px); overflow:auto; }
+    .callout { margin:4px 4px 9px; padding:13px 14px; border-radius:11px; background:#13251b; color:#fff; display:grid; grid-template-columns:1fr auto; gap:4px 12px; align-items:center; }
+    .callout b { font-size:12px; }
+    .callout span { font-size:12px; color:#c9d8ce; }
+    .callout button { grid-column:2; grid-row:1/3; border:0; border-radius:7px; background:#fff; color:#183124; padding:8px 11px; font-size:12px; font-weight:700; cursor:pointer; }
+    .row { display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:10px; }
+    .row:hover { background:#f6f8f5; }
+    .row.chosen { background:#edf5ef; box-shadow:inset 0 0 0 1px #c6dacb; }
+    .row.local { border-top:1px solid var(--line); margin-top:6px; padding-top:16px; }
+    .logo { width:34px; height:34px; border-radius:9px; background:#e8eee9; display:grid; place-items:center; font-weight:750; color:#315d45; }
+    .row > div { display:flex; flex-direction:column; flex:1; }
+    .row b { font-size:14px; }
+    .row small { font-size:12px; color:#8b958e; margin-top:3px; }
+    .row > button { border:1px solid #d5ddd7; background:#fff; border-radius:7px; padding:7px 11px; font-size:12px; cursor:pointer; }
+    .row > button.connected { background:#e4f0e8; border-color:#c8ddcf; color:#30704d; }
+    .guide { margin:8px 14px 0; padding:13px 14px; border:1px solid #d5e0d8; border-radius:10px; background:#fbfdfb; }
+    .guide b { font-size:13px; }
+    .guide ol { margin:7px 0 10px; padding-left:17px; color:#53645a; font-size:12px; line-height:1.65; }
+    .guide-actions { display:flex; gap:7px; flex-wrap:wrap; }
+    .guide-actions a { border-radius:7px; background:#163025; color:#fff; text-decoration:none; padding:8px 11px; font-size:12px; font-weight:700; }
+    .guide-actions a + a { background:#edf3ef; color:#355343; }
+    .guide small { display:block; margin-top:9px; font-size:11px; color:#718077; }
+    .form { margin:8px 14px 14px; padding:14px; background:#f4f7f4; border:1px solid #dbe3dc; border-radius:10px; }
+    .form > label { font-size:12px; font-weight:700; display:block; }
+    .form .line { display:flex; gap:7px; margin:8px 0; }
+    .form input, .form select { flex:1; min-width:0; border:1px solid #cad5cc; background:#fff; border-radius:7px; padding:9px 10px; font-size:13px; outline:none; }
+    .form button { border:0; background:var(--ink); color:#fff; border-radius:7px; padding:0 12px; font-size:12px; cursor:pointer; }
+    .form button:disabled { opacity:.5; cursor:not-allowed; }
+    .form > small { font-size:11px; color:#78837b; }
+    .form > p.err { font-size:12px; color:#a23f35; background:#fff0ee; border-radius:6px; padding:7px; margin:9px 0 0; }
+    .form > p.ok { font-size:12px; color:#276044; background:#e9f7ee; border-radius:6px; padding:7px; margin:9px 0 0; }
+    .picker { display:grid; grid-template-columns:1fr auto; gap:7px; margin-top:11px; }
+    .picker label { grid-column:1/-1; font-size:12px; color:#66746b; }
+    footer { border-top:1px solid var(--line); background:#f7f9f6; padding:13px 20px; display:flex; align-items:center; justify-content:space-between; }
+    footer span { font-size:12px; color:#7b867f; }
+    footer button { border:0; background:var(--ink); color:#fff; border-radius:7px; padding:8px 17px; font-size:12px; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <small>CONNECT MODEL</small>
+      <h2>Kết nối Auditor AI</h2>
+      <p>Chọn hãng trước, rồi mới dán API key. Local dùng Ollama, không cần key.</p>
+    </header>
+    <div class="list">
+      <div class="callout">
+        <b>Khuyến nghị · OpenRouter</b>
+        <span>Một key dùng được nhiều hãng.</span>
+        <button id="use-or">Dùng OpenRouter</button>
+      </div>
+      <div id="rows"></div>
+      <div id="setup"></div>
+    </div>
+    <footer>
+      <span>Cloud dùng API key; Ollama chạy model trên máy này.</span>
+      <button id="close">Close</button>
+    </footer>
+  </div>
+  <script nonce="__NONCE__">
+    const vscode = acquireVsCodeApi();
+    const PROVIDERS = [
+      { id: "openai", name: "OpenAI", desc: "GPT models · API key", letter: "O", keyUrl: "https://platform.openai.com/api-keys", billingUrl: "https://platform.openai.com/settings/organization/billing/overview", note: "Key thường bắt đầu bằng sk-." },
+      { id: "anthropic", name: "Anthropic", desc: "Claude models · API key", letter: "A", keyUrl: "https://console.anthropic.com/settings/keys", billingUrl: "https://console.anthropic.com/settings/billing", note: "Key thường bắt đầu bằng sk-ant-." },
+      { id: "gemini", name: "Google", desc: "Gemini models · API key", letter: "G", keyUrl: "https://aistudio.google.com/app/apikey", billingUrl: "https://console.cloud.google.com/billing", note: "Lấy key tại Google AI Studio." },
+      { id: "github", name: "GitHub Models", desc: "GitHub PAT · models:read", letter: "H", keyUrl: "https://github.com/settings/tokens", billingUrl: "https://github.com/settings/billing", note: "PAT cần quyền models:read." },
+      { id: "deepseek", name: "DeepSeek", desc: "DeepSeek models · API key", letter: "D", keyUrl: "https://platform.deepseek.com/api_keys", billingUrl: "https://platform.deepseek.com/top_up", note: "Key DeepSeek platform." },
+      { id: "qwen", name: "Qwen", desc: "Alibaba Cloud Model Studio · DashScope key", letter: "Q", keyUrl: "https://modelstudio.console.alibabacloud.com/?tab=dashboard#/api-key", billingUrl: "https://billing-cost.console.alibabacloud.com/", note: "DashScope / Model Studio key." },
+      { id: "kimi", name: "Kimi", desc: "Moonshot AI models · API key", letter: "K", keyUrl: "https://platform.moonshot.ai/console/api-keys", billingUrl: "https://platform.moonshot.ai/console/info", note: "Moonshot / Kimi API key." },
+      { id: "openrouter", name: "OpenRouter", desc: "Many providers through one key · Recommended", letter: "R", keyUrl: "https://openrouter.ai/keys", billingUrl: "https://openrouter.ai/settings/credits", note: "Key thường bắt đầu bằng sk-or-v1-." }
+    ];
+    let selected = "";
+    let connected = "";
+    let models = [];
+    let status = { kind: "", text: "" };
+    let busy = false;
+    let lastKey = "";
+
+    function byId(id) { return PROVIDERS.find(p => p.id === id); }
+
+    function renderRows() {
+      const cloud = PROVIDERS.map(p => {
+        const chosen = selected === p.id ? " chosen" : "";
+        const btnClass = connected === p.id ? " connected" : "";
+        const label = connected === p.id ? "Reconnect" : "Choose";
+        return `<div class="row${chosen}" data-id="${p.id}"><span class="logo">${p.letter}</span><div><b>${p.name}</b><small>${p.desc}</small></div><button class="${btnClass}" data-choose="${p.id}">${label}</button></div>`;
+      }).join("");
+      const localChosen = selected === "qwen-local" ? " chosen" : "";
+      const localBtn = connected === "qwen-local" ? " connected" : "";
+      const localLabel = connected === "qwen-local" ? "Reconnect" : "Set up";
+      document.getElementById("rows").innerHTML = cloud +
+        `<div class="row local${localChosen}"><span class="logo">O</span><div><b>Ollama · Models that run on this device</b><small>Qwen, Llama, Gemma and local models · No API key needed</small></div><button class="${localBtn}" data-choose="qwen-local">${localLabel}</button></div>`;
+      document.querySelectorAll("[data-choose]").forEach(btn => {
+        btn.addEventListener("click", () => choose(btn.getAttribute("data-choose")));
+      });
+    }
+
+    function renderSetup() {
+      const el = document.getElementById("setup");
+      if (!selected) { el.innerHTML = ""; return; }
+      if (selected === "qwen-local") {
+        el.innerHTML = `
+          <div class="guide">
+            <div><b>Cài Qwen trên máy</b>
+              <ol>
+                <li>Tải và cài Ollama cho Windows.</li>
+                <li>Chạy <code>ollama pull qwen2.5</code> (hoặc qwen3:8b).</li>
+                <li>Giữ Ollama đang chạy, rồi nhấn “Tìm model trên máy”.</li>
+              </ol>
+            </div>
+            <div class="guide-actions">
+              <a href="https://ollama.com/download">Tải Ollama ↗</a>
+              <a href="https://ollama.com/library/qwen2.5">Xem Qwen ↗</a>
+            </div>
+            <small>Ollama mặc định: http://127.0.0.1:11434 — không gửi key đi đâu.</small>
+          </div>
+          <div class="form">
+            <label>Kết nối Ollama trên máy này</label>
+            <div class="line"><button id="find" ${busy ? "disabled" : ""}>${busy ? "Đang tìm…" : "Tìm model trên máy"}</button></div>
+            <small>Không cần nhập API key. Hãy cài ít nhất một model trước khi kết nối.</small>
+            ${pickerHtml("qwen2.5")}
+            ${statusHtml()}
+          </div>`;
+        document.getElementById("find")?.addEventListener("click", () => {
+          busy = true; renderSetup();
+          vscode.postMessage({ type: "listOllama" });
+        });
+      bindPicker();
+      if (document.getElementById("key") && lastKey) document.getElementById("key").value = lastKey;
+      return;
+      }
+      const p = byId(selected);
+      el.innerHTML = `
+        <div class="guide">
+          <div><b>Lấy ${p.name} API key trong 3 bước</b>
+            <ol>
+              <li>Mở trang tạo key, đăng nhập.</li>
+              <li>Tạo API key mới.</li>
+              <li>Dán key vào ô bên dưới, nhấn Check key.</li>
+            </ol>
+          </div>
+          <div class="guide-actions">
+            <a href="${p.keyUrl}">Create API key ↗</a>
+            <a href="${p.billingUrl}">Billing / Credit ↗</a>
+          </div>
+          <small>${p.note} Không gửi key trong chat. Key lưu local trên máy này.</small>
+        </div>
+        <div class="form">
+          <label>${p.name} API key</label>
+          <div class="line">
+            <input id="key" type="password" placeholder="Dán API key vào đây" autocomplete="off" />
+            <button id="check" ${busy ? "disabled" : ""}>${busy ? "Checking key" : "Check key"}</button>
+          </div>
+          <small>Key được lưu SecretStorage của Cursor, không ghi vào project.</small>
+          ${pickerHtml("")}
+          ${statusHtml()}
+        </div>`;
+      document.getElementById("check")?.addEventListener("click", () => {
+        const apiKey = document.getElementById("key").value.trim();
+        if (!apiKey) { status = { kind: "err", text: "Hãy dán API key trước." }; renderSetup(); return; }
+        lastKey = apiKey;
+        busy = true; renderSetup();
+        vscode.postMessage({ type: "check", provider: selected, apiKey });
+      });
+      bindPicker();
+      if (document.getElementById("key") && lastKey) document.getElementById("key").value = lastKey;
+    }
+
+    function pickerHtml(fallback) {
+      if (!models.length && !fallback) return "";
+      const opts = (models.length ? models : [fallback]).map(m => `<option value="${m}">${m}</option>`).join("");
+      return `<div class="picker"><label>Choose a model</label><select id="model">${opts}</select><button id="save">Save & connect</button></div>`;
+    }
+    function statusHtml() {
+      if (!status.text) return "";
+      return `<p class="${status.kind === "ok" ? "ok" : "err"}">${status.text}</p>`;
+    }
+    function bindPicker() {
+      document.getElementById("save")?.addEventListener("click", () => {
+        const model = document.getElementById("model")?.value || "";
+        const apiKey = document.getElementById("key")?.value?.trim() || "";
+        vscode.postMessage({ type: "save", provider: selected, model, apiKey: lastKey || apiKey });
+      });
+    }
+    function choose(id) {
+      selected = id;
+      models = [];
+      status = { kind: "", text: "" };
+      renderRows();
+      renderSetup();
+    }
+    document.getElementById("use-or").addEventListener("click", () => choose("openrouter"));
+    document.getElementById("close").addEventListener("click", () => vscode.postMessage({ type: "close" }));
+    document.addEventListener("click", (e) => {
+      const a = e.target.closest && e.target.closest("a");
+      if (a && a.href) {
+        e.preventDefault();
+        vscode.postMessage({ type: "open", url: a.href });
+      }
+    });
+    document.addEventListener("input", (e) => {
+      if (e.target && e.target.id === "key") lastKey = e.target.value;
+    });
+    window.addEventListener("message", (e) => {
+      const m = e.data;
+      busy = false;
+      if (m.type === "init") {
+        connected = m.connected || "";
+        if (connected) selected = connected;
+        renderRows();
+        renderSetup();
+      }
+      if (m.type === "checkResult") {
+        status = { kind: m.ok ? "ok" : "err", text: m.message };
+        if (m.ok && m.models?.length) models = m.models;
+        renderRows();
+        renderSetup();
+        if (m.keepKey && document.getElementById("key")) document.getElementById("key").value = m.keepKey;
+      }
+      if (m.type === "saved") {
+        connected = m.provider;
+        status = { kind: "ok", text: "Đã kết nối " + m.provider + " / " + m.model };
+        renderRows();
+        renderSetup();
+      }
+    });
+    renderRows();
+  </script>
+</body>
+</html>
