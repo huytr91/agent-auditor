@@ -1,0 +1,183 @@
+{
+	"name": "agent-auditor",
+	"displayName": "Agent Auditor",
+	"description": "Independent coding-agent audit: signatures + your separate Auditor AI API (local-first)",
+	"version": "0.1.5",
+	"publisher": "agent-auditor",
+	"private": false,
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/huytr91/agent-auditor"
+	},
+	"engines": {
+		"vscode": "^1.85.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"activationEvents": [
+		"onStartupFinished"
+	],
+	"main": "./dist/extension.js",
+	"contributes": {
+		"commands": [
+			{
+				"command": "agentAuditor.watchWorkspace",
+				"title": "Agent Auditor: Watch Workspace"
+			},
+			{
+				"command": "agentAuditor.runFixtureDemo",
+				"title": "Agent Auditor: Run Fixture Demo"
+			},
+			{
+				"command": "agentAuditor.configureAi",
+				"title": "Agent Auditor: Connect Model (chọn hãng + API key)"
+			},
+			{
+				"command": "agentAuditor.openAiSettings",
+				"title": "Agent Auditor: Connect Model"
+			},
+			{
+				"command": "agentAuditor.independentAudit",
+				"title": "Agent Auditor: Independent Audit"
+			},
+			{
+				"command": "agentAuditor.showLastRisk",
+				"title": "Agent Auditor: Show Last Risk"
+			},
+			{
+				"command": "agentAuditor.privacySettings",
+				"title": "Agent Auditor: Privacy Settings"
+			},
+			{
+				"command": "agentAuditor.clearApiKey",
+				"title": "Agent Auditor: Clear API Key"
+			},
+			{
+				"command": "agentAuditor.stopWatch",
+				"title": "Agent Auditor: Stop Watch"
+			}
+		],
+		"configuration": {
+			"title": "Agent Auditor",
+			"properties": {
+				"agentAuditor.privacy": {
+					"type": "string",
+					"enum": [
+						"local_only",
+						"share_anonymous"
+					],
+					"default": "local_only",
+					"description": "Local only (recommended). Share anonymous signatures is a stub — nothing is uploaded in V1."
+				},
+				"agentAuditor.mode": {
+					"type": "string",
+					"enum": [
+						"observe",
+						"audit",
+						"guard"
+					],
+					"default": "observe",
+					"description": "Observe (rules only), Audit (calls your separate Auditor AI), Guard (pause stub)."
+				},
+				"agentAuditor.eventsFile": {
+					"type": "string",
+					"default": ".auditor/events.jsonl",
+					"description": "Workspace-relative JSONL event stream to watch."
+				},
+				"agentAuditor.guardPause": {
+					"type": "boolean",
+					"default": false,
+					"description": "Opt-in Guard pause recommendation stub (never kills the agent)."
+				},
+				"agentAuditor.llmEnabled": {
+					"type": "boolean",
+					"default": false,
+					"description": "Call Auditor AI when interpreting signatures (requires allowNetworkAi + Global settings)."
+				},
+				"agentAuditor.autoDiscover": {
+					"type": "boolean",
+					"default": true,
+					"description": "Also ingest newest *.jsonl under known agent folders (.cursor, .claude, .aider, .continue, .windsurf, .cline, …). Prompts/CoT are dropped. Canonical feed remains .auditor/events.jsonl."
+				},
+				"agentAuditor.autoStart": {
+					"type": "boolean",
+					"default": true,
+					"description": "Start watching automatically when a workspace opens. Tracks file saves/errors as behavioral signatures only (no code, prompt, or CoT)."
+				},
+				"agentAuditor.allowNetworkAi": {
+					"type": "boolean",
+					"default": false,
+					"description": "Explicitly allow network calls to the Auditor AI provider. Independent of privacy=local_only (pattern telemetry)."
+				},
+				"agentAuditor.llmProvider": {
+					"type": "string",
+					"enum": [
+						"openai",
+						"anthropic",
+						"openrouter",
+						"gemini",
+						"github",
+						"kimi",
+						"deepseek",
+						"qwen",
+						"qwen-local",
+						"custom"
+					],
+					"enumDescriptions": [
+						"OpenAI",
+						"Anthropic Claude",
+						"OpenRouter",
+						"Google Gemini",
+						"GitHub Models (personal access token)",
+						"Kimi / Moonshot",
+						"DeepSeek",
+						"Qwen / DashScope (Alibaba Cloud)",
+						"Qwen local (Ollama / LM Studio)",
+						"Custom OpenAI-compatible"
+					],
+					"default": "openai",
+					"description": "Independent Auditor AI provider — Global/User only (workspace overrides ignored for API calls)."
+				},
+				"agentAuditor.llmModel": {
+					"type": "string",
+					"default": "gpt-4o-mini",
+					"description": "Model id for the Auditor AI (Global/User)."
+				},
+				"agentAuditor.llmBaseUrl": {
+					"type": "string",
+					"default": "",
+					"description": "Optional base URL (Global/User only; allowlisted hosts unless custom confirmed)."
+				},
+				"agentAuditor.apiKey": {
+					"type": "string",
+					"default": "",
+					"description": "Legacy fallback. Prefer Agent Auditor: Connect Model (choose provider, then paste key)."
+				}
+			}
+		}
+	},
+	"scripts": {
+		"build": "node esbuild.mjs",
+		"watch": "node esbuild.mjs --watch",
+		"typecheck": "tsc -p tsconfig.json --noEmit",
+		"test": "node --import tsx --test src/**/*.test.ts",
+		"package": "pnpm run build && vsce package --no-dependencies --allow-missing-repository -o agent-auditor-0.1.1.vsix"
+	},
+	"dependencies": {
+		"@agent-auditor/adapters-cursor": "workspace:*",
+		"@agent-auditor/adapters-claude": "workspace:*",
+		"@agent-auditor/engine": "workspace:*",
+		"@agent-auditor/pattern-store": "workspace:*",
+		"@agent-auditor/protocol": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/node": "^22.13.10",
+		"@types/vscode": "^1.85.0",
+		"@vscode/vsce": "^3.2.2",
+		"esbuild": "^0.25.0",
+		"tsx": "^4.19.3",
+		"typescript": "^5.8.2"
+	}
+}

@@ -1,0 +1,14 @@
+*.vsix
+.env
+.env.*
+*.pem
+*.key
+node_modules/
+.auditor/
+.cursor/
+.vscode/
+.idea/
+*.log
+Thumbs.db
+.DS_Store
+patched-extension/.vsixmanifest

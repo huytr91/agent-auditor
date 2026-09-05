@@ -1,0 +1,11 @@
+{"id":"e1","session_id":"demo-same-error","type":"read","path":"src/payment.ts","timestamp":"2026-08-26T12:00:00.000Z","progress_delta":0.05}
+{"id":"e2","session_id":"demo-same-error","type":"edit","path":"src/payment.ts","timestamp":"2026-08-26T12:00:05.000Z","progress_delta":0}
+{"id":"e3","session_id":"demo-same-error","type":"error","path":"src/payment.ts","error":"TypeError: Cannot read property 'amount' of undefined at payment.ts:42","timestamp":"2026-08-26T12:00:06.000Z","progress_delta":0}
+{"id":"e4","session_id":"demo-same-error","type":"edit","path":"src/payment.ts","timestamp":"2026-08-26T12:00:10.000Z","progress_delta":0}
+{"id":"e5","session_id":"demo-same-error","type":"error","path":"src/payment.ts","error":"TypeError: Cannot read property 'amount' of undefined at payment.ts:44","timestamp":"2026-08-26T12:00:11.000Z","progress_delta":0}
+{"id":"e6","session_id":"demo-same-error","type":"edit","path":"src/payment.ts","timestamp":"2026-08-26T12:00:15.000Z","progress_delta":0}
+{"id":"e7","session_id":"demo-same-error","type":"error","path":"src/payment.ts","error":"TypeError: Cannot read property 'amount' of undefined at payment.ts:45","timestamp":"2026-08-26T12:00:16.000Z","progress_delta":0}
+{"id":"e8","session_id":"demo-same-error","type":"run_test","test_result":{"passed":3,"failed":2},"timestamp":"2026-08-26T12:00:20.000Z","progress_delta":0}
+{"id":"e9","session_id":"demo-same-error","type":"edit","path":"src/payment.ts","timestamp":"2026-08-26T12:00:25.000Z","progress_delta":0}
+{"id":"e10","session_id":"demo-same-error","type":"error","path":"src/payment.ts","error":"TypeError: Cannot read property 'amount' of undefined at payment.ts:48","timestamp":"2026-08-26T12:00:26.000Z","progress_delta":0}
+{"id":"e11","session_id":"demo-same-error","type":"run_test","test_result":{"passed":2,"failed":3},"timestamp":"2026-08-26T12:00:30.000Z","progress_delta":-0.05}
