@@ -34,13 +34,26 @@ On workspace open (`agentAuditor.autoStart`, default **on**):
 
 | Hook | What it observes | What it stores |
 |---|---|---|
-| `onDidSaveTextDocument` | Agent (or human) saved a file | `edit` + path hash |
-| `onDidCreateFiles` / `onDidDeleteFiles` | New / removed files | `write` / `delete` + path hash |
+| **Disk `FileSystemWatcher`** | Files written on disk (agent tools skip IDE Save) | `edit` / `write` / `delete` + path hash |
+| `onDidSaveTextDocument` | Human / buffer save | `edit` + path hash |
+| `onDidCreateFiles` / `onDidDeleteFiles` / rename | New / removed files | `write` / `delete` + path hash |
 | `onDidChangeDiagnostics` | Compiler/linter errors | `error` + message fingerprint |
-| File watcher `.auditor/events.jsonl` | Any agent’s canonical event stream | Normalized actions |
-| Auto-discover `*.jsonl` under `.cursor`, `.claude`, `.aider`, `.continue`, `.windsurf`, `.cline` | Other agents’ traces | Same signatures; **prompts/CoT dropped** |
+| Vendor hooks (Cursor / Claude Code / ChatGPT Codex) | Official agent-loop events | Path + type only |
+| File watcher `.auditor/events.jsonl` | Canonical event stream | Normalized actions |
+| Auto-discover `*.jsonl` under `.cursor`, `.claude`, `.codex`, `.aider`, … | Other agents’ traces | Same signatures; **prompts/CoT dropped** |
 
-It does **not** hook Cursor’s private chat/tool API (that API is not public). The live substitute is IDE behavior — the same signals you would use to notice “this agent is spinning.”
+**Why disk + vendor hooks:** Cursor Write, Claude Code `Edit`/`Write`, and ChatGPT Codex `apply_patch` write the file on disk. They often **do not** fire VS Code `onDidSaveTextDocument` (same class of bug as [claude-code#62900](https://github.com/anthropics/claude-code/issues/62900)). Save-only cameras stay blank.
+
+Vendor loop (the correct realtime eval, per their docs):
+
+| Product | Official event | Matcher | Payload we keep |
+|---|---|---|---|
+| Cursor Agent | `afterFileEdit` in `~/.cursor/hooks.json` | — | `file_path` only (drop `edits`) |
+| Claude Code (CLI / IDE / Desktop) | `PostToolUse` in `~/.claude/settings.json` | `Edit\|Write\|MultiEdit` | `tool_input.file_path` only |
+| ChatGPT **Codex** (CLI / IDE) | `PostToolUse` in `~/.codex/hooks.json` | `apply_patch` (alias `Edit`/`Write`) | path headers from the patch; **never** `tool_input.command` |
+| ChatGPT / Claude **chat websites** | none | — | no workspace file loop |
+
+Install / refresh: **Agent Auditor: Install ChatGPT/Claude/Cursor Hooks**. Codex then needs `/hooks` → trust. ChatGPT.com and Claude.ai chats cannot be scored this way.
 
 Optional, on-demand: **Independent Audit** — you state the *claim* (“OAuth + refresh tokens”). The Auditor AI judges from signatures + claim only, never from source.
 
@@ -49,10 +62,10 @@ Optional, on-demand: **Independent Audit** — you state the *claim* (“OAuth +
 ```bash
 cd patched-extension
 npx @vscode/vsce package --no-dependencies --allow-missing-repository
-cursor --install-extension agent-auditor-0.1.5.vsix
+cursor --install-extension agent-auditor-0.1.7.vsix
 ```
 
-Or **Extensions → ⋯ → Install from VSIX…**. Reload the window. Status bar: `Auditor: HEALTHY`.
+Or **Extensions → ⋯ → Install from VSIX…**. Reload the window. Status bar: `Auditor: HEALTHY` (click it). Bottom panel tab **Auditor** shows state, signatures, and the last files.
 
 Same VSIX runs on VS Code and Windsurf.
 

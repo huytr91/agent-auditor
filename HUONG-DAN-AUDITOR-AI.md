@@ -1,17 +1,20 @@
 # Hướng dẫn Agent Auditor
 
-Extension **0.1.5** — la bàn chống lạc lối cho coding agent. Chỉ dùng **chữ ký hành vi** (lặp lỗi, oscillation, không progress). **Không** đọc code, prompt, hay thinking.
+Extension **0.1.6** — la bàn chống lạc lối cho coding agent. Chỉ dùng **chữ ký hành vi** (lặp lỗi, oscillation, không progress). **Không** đọc code, prompt, hay thinking.
 
 ## Tự chạy
 
 Mở workspace trong Cursor/VS Code là Auditor tự bật (`autoStart=true`):
 
-- Save / tạo / xóa file → sự kiện `edit` / `write` / `delete` (hash path, không lấy nội dung)
-- Lỗi diagnostics (TypeScript, Python, …) → sự kiện `error` (fingerprint message)
+- **Ghi file trên đĩa** (không chỉ Save IDE) → `edit` / `write` / `delete`. Cursor Write, Claude `Edit`/`Write`, ChatGPT Codex `apply_patch` thường **không** bắn `onDidSaveTextDocument`.
+- Hook chính thức từng hãng (chỉ path): Cursor `afterFileEdit`, Claude Code `PostToolUse`, Codex `PostToolUse`/`apply_patch`. ChatGPT.com và Claude.ai chat **không** có vòng ghi file workspace.
+- Lỗi diagnostics → `error` (fingerprint message)
 - Tail `.auditor/events.jsonl`
-- Auto-discover `*.jsonl` trong `.cursor`, `.claude`, `.aider`, `.continue`, `.windsurf`, `.cline` (bỏ CoT/prompt)
+- Auto-discover `*.jsonl` trong `.cursor`, `.claude`, `.codex`, … (bỏ CoT/prompt)
 
-Status bar trái: `HEALTHY | SUSPICIOUS | STAGNATING | LOST`.
+Cài hook user: **Agent Auditor: Install ChatGPT/Claude/Cursor Hooks**. Codex: gõ `/hooks` rồi trust.
+
+Status bar trái: `HEALTHY | SUSPICIOUS | STAGNATING | LOST`. Click → panel dưới **Auditor** (cạnh Terminal).
 
 Tắt tự chạy: Settings → `agentAuditor.autoStart` = false.  
 Dừng tay: **Agent Auditor: Stop Watch**.
@@ -48,7 +51,7 @@ Mọi agent có thể append `.auditor/events.jsonl` (1 JSON / dòng). Không gh
 ## Cài
 
 ```bash
-cursor --install-extension agent-auditor-0.1.5.vsix
+cursor --install-extension agent-auditor-0.1.7.vsix
 ```
 
 Cũng cài được trên VS Code / Windsurf (VSIX). Reload window một lần.

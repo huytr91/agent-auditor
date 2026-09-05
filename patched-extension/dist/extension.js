@@ -5852,7 +5852,77 @@ var historyStore;
 var liveDisposables = [];
 var jsonlOffsets = /* @__PURE__ */ new Map();
 var editDebounce = /* @__PURE__ */ new Map();
+var lastLive = /* @__PURE__ */ new Map();
 var diagTimer;
+var compassView;
+var lastCompassState = "idle";
+var compassSnapshot = {
+  state: "idle",
+  signatures: [],
+  events: [],
+  eventCount: 0,
+  score: void 0,
+  watching: false
+};
+function fileBase(p) {
+  const n = String(p || "").replace(/\\/g, "/");
+  return n.split("/").filter(Boolean).pop() || "";
+}
+function postCompass() {
+  compassView?.webview.postMessage(compassSnapshot);
+}
+function loadCompassHtml(context) {
+  const p = (0, import_node_path4.join)(context.extensionPath, "media", "compass.html");
+  const nonce = `${Date.now().toString(36)}${Math.random().toString(16).slice(2)}`;
+  return (0, import_node_fs6.readFileSync)(p, "utf8").split("__NONCE__").join(nonce);
+}
+function registerCompass(context) {
+  const provider = {
+    resolveWebviewView(view) {
+      compassView = view;
+      view.webview.options = { enableScripts: true };
+      view.webview.html = loadCompassHtml(context);
+      view.webview.onDidReceiveMessage((msg) => {
+        if (msg?.type === "ready") postCompass();
+      });
+      view.onDidDispose(() => {
+        if (compassView === view) compassView = void 0;
+      });
+      postCompass();
+    }
+  };
+  return vscode.window.registerWebviewViewProvider("agentAuditor.compass", provider, {
+    webviewOptions: { retainContextWhenHidden: true }
+  });
+}
+function showCompass() {
+  void vscode.commands.executeCommand("agentAuditor.compass.focus");
+}
+function noteCompassEvent(rawLine, result) {
+  let file = "";
+  let action = "edit";
+  let ts = new Date().toISOString();
+  try {
+    const raw = JSON.parse(String(rawLine || "").trim() || "{}");
+    file = fileBase(raw.path || raw.file || "");
+    action = String(raw.type || raw.action || "edit");
+    ts = raw.timestamp || ts;
+  } catch {
+  }
+  const sigs = result.signatures.map((s) => s.family);
+  compassSnapshot.state = result.state;
+  compassSnapshot.signatures = sigs;
+  compassSnapshot.eventCount += 1;
+  compassSnapshot.watching = true;
+  compassSnapshot.score = result.assessment?.score;
+  compassSnapshot.events.unshift({ t: ts, file, action, state: result.state });
+  compassSnapshot.events = compassSnapshot.events.slice(0, 8);
+  postCompass();
+  if (result.state !== "HEALTHY" && lastCompassState === "HEALTHY") {
+    showCompass();
+  }
+  lastCompassState = result.state;
+}
 async function enableAuditorNetwork() {
   const cfg = vscode.workspace.getConfiguration("agentAuditor");
   const trusted = resolveTrustedLlmSettings(cfg);
@@ -5895,7 +5965,7 @@ async function refreshAuditorStatus(context) {
   const key = await resolveApiKey(context);
   if (key) {
     if (statusBar.command === "agentAuditor.configureAi" || /set API|idle/.test(statusBar.text)) {
-      statusBar.command = "agentAuditor.showLastRisk";
+      statusBar.command = "agentAuditor.showCompass";
       statusBar.text = "$(shield) Auditor: ready";
     }
     statusBar.tooltip = "Agent Auditor \u2014 API ready; separate from Cursor Agent";
@@ -5925,18 +5995,23 @@ function activate(context) {
     vscode.StatusBarAlignment.Left,
     100
   );
-  statusBar.command = "agentAuditor.showLastRisk";
+  statusBar.command = "agentAuditor.showCompass";
   statusBar.text = "$(shield) Auditor: idle";
-  statusBar.tooltip = "Agent Auditor \u2014 local only; separate AI API";
+  statusBar.tooltip = "Agent Auditor compass \u2014 bottom panel";
   statusBar.show();
   context.subscriptions.push(
     output,
     statusBar,
+    registerCompass(context),
     vscode.commands.registerCommand(
       "agentAuditor.watchWorkspace",
       () => startWatch(context)
     ),
     vscode.commands.registerCommand("agentAuditor.stopWatch", () => stopWatch()),
+    vscode.commands.registerCommand(
+      "agentAuditor.installVendorHooks",
+      () => installVendorHooks(context, { notify: true })
+    ),
     vscode.commands.registerCommand(
       "agentAuditor.runFixtureDemo",
       () => runFixtureDemo(context)
@@ -5944,6 +6019,10 @@ function activate(context) {
     vscode.commands.registerCommand(
       "agentAuditor.showLastRisk",
       () => showLastRisk()
+    ),
+    vscode.commands.registerCommand(
+      "agentAuditor.showCompass",
+      () => showCompass()
     ),
     vscode.commands.registerCommand(
       "agentAuditor.privacySettings",
@@ -5984,7 +6063,7 @@ function activate(context) {
     "Auditor AI uses YOUR separate API key \u2014 not the coding agent's model."
   );
   output.appendLine(
-    "Auto-watch: file saves + diagnostics as behavioral signatures (no code/prompt/CoT)."
+    "Auto-watch: disk writes + vendor hooks (Cursor/Claude/Codex) as signatures (no code/prompt/CoT)."
   );
   void (async () => {
     if (settings().autoStart !== false && workspaceRoot()) {
@@ -6006,6 +6085,8 @@ function settings() {
   const guardPause = cfg.get("guardPause") ?? false;
   const autoDiscover = cfg.get("autoDiscover") ?? true;
   const autoStart = cfg.get("autoStart") ?? true;
+  const diskWatch = cfg.get("diskWatch") ?? true;
+  const vendorHooks = cfg.get("vendorHooks") ?? true;
   const trusted = resolveTrustedLlmSettings(cfg);
   return {
     privacy,
@@ -6018,7 +6099,9 @@ function settings() {
     llmEnabled: trusted.llmEnabled,
     allowNetworkAi: trusted.allowNetworkAi,
     autoDiscover,
-    autoStart
+    autoStart,
+    diskWatch,
+    vendorHooks
   };
 }
 function workspaceRoot() {
@@ -6384,6 +6467,113 @@ async function independentAudit(context) {
     vscode.window.showErrorMessage(`Auditor AI failed: ${msg}`);
   }
 }
+function vendorHookCommand(scriptAbs) {
+  const q = scriptAbs.replace(/"/g, '\\"');
+  return `node "${q}"`;
+}
+function hookAlreadyListed(arr, marker) {
+  return (arr || []).some((h) => {
+    const cmd = typeof h === "string" ? h : h?.command || h?.hooks?.[0]?.command || "";
+    return String(cmd).includes(marker);
+  });
+}
+function writeMergedJson(abs, data) {
+  (0, import_node_fs6.mkdirSync)((0, import_node_path4.dirname)(abs), { recursive: true });
+  (0, import_node_fs6.writeFileSync)(abs, `${JSON.stringify(data, null, 2)}\n`);
+}
+function readJsonOr(abs, fallback) {
+  try {
+    if (!(0, import_node_fs6.existsSync)(abs)) return fallback;
+    return JSON.parse((0, import_node_fs6.readFileSync)(abs, "utf8") || "null") || fallback;
+  } catch {
+    return fallback;
+  }
+}
+function installVendorHooks(context, opts = {}) {
+  const src = (0, import_node_path4.join)(context.extensionPath, "hooks", "append-event.cjs");
+  const dest = (0, import_node_path4.join)((0, import_node_os.homedir)(), ".agent-auditor", "append-event.cjs");
+  try {
+    (0, import_node_fs6.mkdirSync)((0, import_node_path4.dirname)(dest), { recursive: true });
+    if ((0, import_node_fs6.existsSync)(src)) (0, import_node_fs6.copyFileSync)(src, dest);
+  } catch (err) {
+    const msg = `Vendor hooks: copy failed (${err instanceof Error ? err.message : String(err)})`;
+    if (opts.notify) vscode.window.showErrorMessage(msg);
+    return msg;
+  }
+  const cmd = vendorHookCommand(dest);
+  const marker = "agent-auditor";
+  const home = (0, import_node_os.homedir)();
+  const notes = [];
+  const cursorFile = (0, import_node_path4.join)(home, ".cursor", "hooks.json");
+  const cursor = readJsonOr(cursorFile, { version: 1, hooks: {} });
+  cursor.version = cursor.version || 1;
+  cursor.hooks = cursor.hooks || {};
+  cursor.hooks.afterFileEdit = cursor.hooks.afterFileEdit || [];
+  cursor.hooks.postToolUseFailure = cursor.hooks.postToolUseFailure || [];
+  let cursorChanged = false;
+  if (!hookAlreadyListed(cursor.hooks.afterFileEdit, marker)) {
+    cursor.hooks.afterFileEdit.push({ command: cmd });
+    cursorChanged = true;
+  }
+  if (!hookAlreadyListed(cursor.hooks.postToolUseFailure, marker)) {
+    cursor.hooks.postToolUseFailure.push({ command: cmd });
+    cursorChanged = true;
+  }
+  if (cursorChanged) {
+    writeMergedJson(cursorFile, cursor);
+    notes.push("Cursor ~/.cursor/hooks.json (afterFileEdit)");
+  }
+  const codexFile = (0, import_node_path4.join)(home, ".codex", "hooks.json");
+  const codex = readJsonOr(codexFile, { hooks: {} });
+  codex.hooks = codex.hooks || {};
+  codex.hooks.PostToolUse = codex.hooks.PostToolUse || [];
+  let codexChanged = false;
+  if (!hookAlreadyListed(codex.hooks.PostToolUse, marker)) {
+    codex.hooks.PostToolUse.push({
+      matcher: "apply_patch|Edit|Write",
+      hooks: [{ type: "command", command: cmd, timeout: 8, statusMessage: "Auditor signature" }]
+    });
+    codexChanged = true;
+  }
+  if (codexChanged) {
+    if (!codex.description) {
+      codex.description = "Agent Auditor signatures only (no patch/prompt body).";
+    }
+    writeMergedJson(codexFile, codex);
+    notes.push("ChatGPT Codex ~/.codex/hooks.json (PostToolUse apply_patch)");
+  }
+  const claudeFile = (0, import_node_path4.join)(home, ".claude", "settings.json");
+  const claude = readJsonOr(claudeFile, {});
+  claude.hooks = claude.hooks || {};
+  claude.hooks.PostToolUse = claude.hooks.PostToolUse || [];
+  claude.hooks.PostToolUseFailure = claude.hooks.PostToolUseFailure || [];
+  let claudeChanged = false;
+  if (!hookAlreadyListed(claude.hooks.PostToolUse, marker)) {
+    claude.hooks.PostToolUse.push({
+      matcher: "Edit|Write|MultiEdit",
+      hooks: [{ type: "command", command: cmd, timeout: 10 }]
+    });
+    claudeChanged = true;
+  }
+  if (!hookAlreadyListed(claude.hooks.PostToolUseFailure, marker)) {
+    claude.hooks.PostToolUseFailure.push({
+      matcher: "Edit|Write|MultiEdit",
+      hooks: [{ type: "command", command: cmd, timeout: 10 }]
+    });
+    claudeChanged = true;
+  }
+  if (claudeChanged) {
+    writeMergedJson(claudeFile, claude);
+    notes.push("Claude Code ~/.claude/settings.json (PostToolUse Edit|Write)");
+  }
+  const line = notes.length ? `Vendor hooks ready: ${notes.join(" · ")}` : "Vendor hooks already installed (Cursor / Claude / Codex).";
+  if (opts.notify) {
+    vscode.window.showInformationMessage(
+      `${line} Codex: open /hooks and trust. ChatGPT web (no Codex) has no workspace file loop.`
+    );
+  }
+  return line;
+}
 async function startWatch(context, opts = {}) {
   const root = workspaceRoot();
   if (!root) {
@@ -6416,6 +6606,16 @@ async function startWatch(context, opts = {}) {
     );
     for (const p of discovered) output.appendLine(`  \u2022 ${p}`);
   }
+  compassSnapshot = {
+    state: "HEALTHY",
+    signatures: [],
+    events: [],
+    eventCount: 0,
+    score: void 0,
+    watching: true
+  };
+  lastCompassState = "HEALTHY";
+  postCompass();
   updateStatus("HEALTHY", []);
   await ingestFileFrom(abs, 0, context);
   watcher = vscode.workspace.createFileSystemWatcher(
@@ -6441,6 +6641,10 @@ async function startWatch(context, opts = {}) {
     }
   }
   hookLiveActivity(context, root);
+  if (s.vendorHooks !== false) {
+    const hookNote = installVendorHooks(context, { notify: false });
+    if (hookNote) output.appendLine(hookNote);
+  }
   if (!opts.silent) {
     vscode.window.showInformationMessage(
       `Agent Auditor watching ${rel} (local only).`
@@ -6456,6 +6660,7 @@ function stopWatch() {
   liveDisposables = [];
   for (const t of editDebounce.values()) clearTimeout(t);
   editDebounce.clear();
+  lastLive.clear();
   if (diagTimer) clearTimeout(diagTimer);
   diagTimer = void 0;
   jsonlOffsets.clear();
@@ -6472,7 +6677,13 @@ function shouldIgnorePath(fsPath) {
     "/out/",
     "/coverage/",
     "/.venv/",
-    "/__pycache__/"
+    "/__pycache__/",
+    "/.cursor/",
+    "/.claude/",
+    "/.codex/",
+    "/.turbo/",
+    "/.cache/",
+    "/build/"
   ];
   if (skip.some((s) => p.includes(s))) return true;
   if (/\.(png|jpe?g|gif|webp|ico|woff2?|lock|vsix|map|bin)$/.test(p)) return true;
@@ -6486,6 +6697,11 @@ function eventsFileAbs() {
 function appendLiveEvent(raw) {
   const abs = eventsFileAbs();
   if (!abs) return;
+  const key = `${raw.type}:${raw.path || ""}`;
+  const now = Date.now();
+  const prev = lastLive.get(key);
+  if (prev && now - prev < 1500) return;
+  lastLive.set(key, now);
   try {
     (0, import_node_fs6.mkdirSync)((0, import_node_path4.dirname)(abs), { recursive: true });
     const row = {
@@ -6537,6 +6753,39 @@ function hookLiveActivity(context, root) {
       }
     })
   );
+  if (typeof vscode.workspace.onDidRenameFiles === "function") {
+    liveDisposables.push(
+      vscode.workspace.onDidRenameFiles((e) => {
+        for (const f of e.files) {
+          if (f.newUri?.scheme === "file" && !shouldIgnorePath(f.newUri.fsPath)) {
+            appendLiveEvent({ type: "write", path: f.newUri.fsPath });
+          }
+          if (f.oldUri?.scheme === "file" && !shouldIgnorePath(f.oldUri.fsPath)) {
+            appendLiveEvent({ type: "delete", path: f.oldUri.fsPath });
+          }
+        }
+      })
+    );
+  }
+  if (settings().diskWatch !== false) {
+    const disk = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(root, "**/*")
+    );
+    disk.onDidChange((uri) => {
+      if (uri.scheme !== "file" || shouldIgnorePath(uri.fsPath)) return;
+      scheduleEdit(uri.fsPath, "edit");
+    });
+    disk.onDidCreate((uri) => {
+      if (uri.scheme !== "file" || shouldIgnorePath(uri.fsPath)) return;
+      scheduleEdit(uri.fsPath, "write");
+    });
+    disk.onDidDelete((uri) => {
+      if (uri.scheme !== "file" || shouldIgnorePath(uri.fsPath)) return;
+      scheduleEdit(uri.fsPath, "delete");
+    });
+    liveDisposables.push(disk);
+    output.appendLine("Disk camera on — agent tool writes (Cursor/Claude/Codex) do not need IDE Save.");
+  }
   liveDisposables.push(
     vscode.languages.onDidChangeDiagnostics((e) => {
       if (diagTimer) clearTimeout(diagTimer);
@@ -6564,7 +6813,8 @@ function hookLiveActivity(context, root) {
     ".continue/**/*.jsonl",
     ".windsurf/**/*.jsonl",
     ".cline/**/*.jsonl",
-    ".roo/**/*.jsonl"
+    ".roo/**/*.jsonl",
+    ".codex/**/*.jsonl"
   ];
   for (const g of globs) {
     const w = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(root, g));
@@ -6626,6 +6876,7 @@ async function ingestLine(line, useAi, sourcePath) {
     lastResult = result;
     const sigs = result.signatures.map((s) => s.family);
     updateStatus(result.state, sigs);
+    noteCompassEvent(line, result);
     output.appendLine(
       `[${ev.timestamp}] ${ev.action} \u2192 ${result.state} | ${sigs.join(", ") || "no signatures"}`
     );
@@ -6645,9 +6896,9 @@ function updateStatus(state, families) {
   const icon = state === "LOST" ? "$(error)" : state === "STAGNATING" ? "$(warning)" : state === "SUSPICIOUS" ? "$(info)" : "$(shield)";
   const sig = families.length > 0 ? ` \xB7 ${families.slice(0, 3).join(",")}` : "";
   statusBar.text = `${icon} Auditor: ${state}${sig}`;
+  statusBar.command = "agentAuditor.showCompass";
   statusBar.tooltip = families.length ? `Signatures: ${families.join(", ")}
-Privacy: local-first
-Auditor AI: separate API` : "Agent Auditor \u2014 local only";
+Click to open compass (bottom panel)` : "Agent Auditor compass \u2014 click to open bottom panel";
   statusBar.backgroundColor = state === "LOST" || state === "STAGNATING" ? new vscode.ThemeColor("statusBarItem.warningBackground") : void 0;
 }
 async function runFixtureDemo(context) {
