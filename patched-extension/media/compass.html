@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-__NONCE__';" />
+  <style>
+    :root {
+      --fg: var(--vscode-foreground);
+      --muted: var(--vscode-descriptionForeground);
+      --border: var(--vscode-panel-border);
+      --bg: var(--vscode-sideBar-background);
+    }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); font-family: var(--vscode-font-family, "Segoe UI", sans-serif); font-size: 12px; }
+    .box { padding: 10px 12px 8px; }
+    .row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+    .state { font-size: 15px; font-weight: 700; letter-spacing: .02em; }
+    .state.HEALTHY { color: var(--vscode-testing-iconPassed, #3fa266); }
+    .state.SUSPICIOUS { color: var(--vscode-charts-blue, #3794ff); }
+    .state.STAGNATING { color: var(--vscode-editorWarning-foreground, #d6a100); }
+    .state.LOST { color: var(--vscode-errorForeground, #f14c4c); }
+    .meta { color: var(--muted); font-size: 11px; }
+    .sigs { margin-top: 6px; min-height: 18px; color: var(--muted); }
+    .chip { display: inline-block; margin: 0 6px 4px 0; padding: 1px 7px; border: 1px solid var(--border); border-radius: 999px; font-size: 10px; letter-spacing: .04em; }
+    ul { list-style: none; margin: 8px 0 0; padding: 0; border-top: 1px solid var(--border); }
+    li { display: grid; grid-template-columns: 52px 1fr auto; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); color: var(--muted); }
+    li b { color: var(--fg); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .empty { margin-top: 10px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="row">
+      <div id="state" class="state">idle</div>
+      <div id="meta" class="meta">waiting</div>
+    </div>
+    <div id="sigs" class="sigs"></div>
+    <ul id="feed"></ul>
+    <div id="empty" class="empty">No live events yet. Agent file writes appear here.</div>
+  </div>
+  <script nonce="__NONCE__">
+    function esc(s) {
+      return String(s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    }
+    function time(iso) {
+      if (!iso) return "";
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return "";
+      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    }
+    window.addEventListener("message", (e) => {
+      const m = e.data || {};
+      const state = m.state || "idle";
+      const el = document.getElementById("state");
+      el.textContent = state;
+      el.className = "state " + state;
+      const n = m.eventCount || 0;
+      const score = typeof m.score === "number" ? " · score " + m.score.toFixed(2) : "";
+      document.getElementById("meta").textContent = n + " events" + score;
+      const sigs = m.signatures || [];
+      document.getElementById("sigs").innerHTML = sigs.length
+        ? sigs.map((s) => '<span class="chip">' + esc(s) + "</span>").join("")
+        : (m.watching ? "watching · no signatures" : "");
+      const feed = document.getElementById("feed");
+      const events = m.events || [];
+      feed.innerHTML = events.map((ev) =>
+        "<li><span>" + esc(time(ev.t)) + "</span><b>" + esc(ev.file || "—") + "</b><span>" + esc(ev.action || "") + "</span></li>"
+      ).join("");
+      document.getElementById("empty").style.display = events.length ? "none" : "block";
+    });
+    vscode.postMessage({ type: "ready" });
+  </script>
+</body>
+</html>

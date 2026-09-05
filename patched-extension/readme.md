@@ -5,7 +5,7 @@ Local-first **behavioral** risk signals for coding agents (Cursor, Claude Code, 
 ## Install
 
 ```bash
-cursor --install-extension agent-auditor-0.1.5.vsix
+cursor --install-extension agent-auditor-0.1.7.vsix
 ```
 
 Or: **Extensions** → `⋯` → **Install from VSIX…** (Cursor, VS Code, Windsurf). Reload once.
@@ -14,12 +14,15 @@ Or: **Extensions** → `⋯` → **Install from VSIX…** (Cursor, VS Code, Wind
 
 On workspace open (`agentAuditor.autoStart`):
 
-- File save / create / delete → `edit` / `write` / `delete` (path hash only)
+- **Disk writes** (not only IDE Save) → `edit` / `write` / `delete` (path hash only). Cursor / Claude / Codex tools skip `onDidSaveTextDocument`.
+- Vendor hooks: Cursor `afterFileEdit`, Claude Code `PostToolUse` (`Edit|Write`), ChatGPT Codex `PostToolUse` (`apply_patch`). Path only — no patch/prompt/content.
 - Diagnostics errors → `error` (message fingerprint)
 - Tail `.auditor/events.jsonl`
-- `autoDiscover`: newest `*.jsonl` under `.cursor`, `.claude`, `.aider`, `.continue`, `.windsurf`, `.cline` (prompts/CoT dropped)
+- `autoDiscover`: newest `*.jsonl` under `.cursor`, `.claude`, `.codex`, `.aider`, … (prompts/CoT dropped)
 
-Status bar: `HEALTHY | SUSPICIOUS | STAGNATING | LOST`.
+Command **Install ChatGPT/Claude/Cursor Hooks** writes user-level hook files. Codex: `/hooks` then trust. ChatGPT.com / Claude.ai chat have no workspace file loop.
+
+Status bar: `HEALTHY | SUSPICIOUS | STAGNATING | LOST`. Click opens the **Auditor** tab in the bottom panel (state, signatures, last files).
 
 Turn off: `agentAuditor.autoStart` = false. Stop: **Agent Auditor: Stop Watch**.
 
@@ -44,6 +47,7 @@ Supported: OpenAI, Anthropic, OpenRouter, Gemini, GitHub Models, Kimi/Moonshot, 
 | **Agent Auditor: Show Last Risk** | Print last assessment |
 | **Agent Auditor: Privacy Settings** | Local only vs share stub |
 | **Agent Auditor: Stop Watch** | Stop auto-watch |
+| **Agent Auditor: Install ChatGPT/Claude/Cursor Hooks** | User-level Cursor / Claude Code / Codex hooks (path only) |
 | **Agent Auditor: Clear API Key** | Remove SecretStorage key |
 
 ## Feeding events (any agent)

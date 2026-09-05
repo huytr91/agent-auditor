@@ -1,0 +1,18 @@
+{
+  "description": "Agent Auditor: signatures only. Do not log tool_input.command (patch body).",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"%USERPROFILE%\\.agent-auditor\\append-event.cjs\"",
+            "timeout": 8,
+            "statusMessage": "Auditor signature"
+          }
+        ]
+      }
+    ]
+  }
+}

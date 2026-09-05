@@ -2,7 +2,7 @@
 	"name": "agent-auditor",
 	"displayName": "Agent Auditor",
 	"description": "Independent coding-agent audit: signatures + your separate Auditor AI API (local-first)",
-	"version": "0.1.5",
+	"version": "0.1.7",
 	"publisher": "agent-auditor",
 	"private": false,
 	"license": "MIT",
@@ -21,6 +21,25 @@
 	],
 	"main": "./dist/extension.js",
 	"contributes": {
+		"viewsContainers": {
+			"panel": [
+				{
+					"id": "agentAuditor",
+					"title": "Auditor",
+					"icon": "media/auditor.svg"
+				}
+			]
+		},
+		"views": {
+			"agentAuditor": [
+				{
+					"type": "webview",
+					"id": "agentAuditor.compass",
+					"name": "Compass",
+					"visibility": "visible"
+				}
+			]
+		},
 		"commands": [
 			{
 				"command": "agentAuditor.watchWorkspace",
@@ -43,6 +62,10 @@
 				"title": "Agent Auditor: Independent Audit"
 			},
 			{
+				"command": "agentAuditor.showCompass",
+				"title": "Agent Auditor: Show Compass"
+			},
+			{
 				"command": "agentAuditor.showLastRisk",
 				"title": "Agent Auditor: Show Last Risk"
 			},
@@ -57,6 +80,10 @@
 			{
 				"command": "agentAuditor.stopWatch",
 				"title": "Agent Auditor: Stop Watch"
+			},
+			{
+				"command": "agentAuditor.installVendorHooks",
+				"title": "Agent Auditor: Install ChatGPT/Claude/Cursor Hooks"
 			}
 		],
 		"configuration": {
@@ -104,7 +131,17 @@
 				"agentAuditor.autoStart": {
 					"type": "boolean",
 					"default": true,
-					"description": "Start watching automatically when a workspace opens. Tracks file saves/errors as behavioral signatures only (no code, prompt, or CoT)."
+					"description": "Start watching automatically when a workspace opens. Tracks disk writes (not only IDE save), diagnostics, and vendor hooks as signatures only (no code, prompt, or CoT)."
+				},
+				"agentAuditor.diskWatch": {
+					"type": "boolean",
+					"default": true,
+					"description": "Watch workspace files on disk. Coding agents (Cursor Write, Claude Edit/Write, ChatGPT Codex apply_patch) often write without firing onDidSaveTextDocument."
+				},
+				"agentAuditor.vendorHooks": {
+					"type": "boolean",
+					"default": true,
+					"description": "Install user-level Cursor / Claude Code / ChatGPT Codex hooks that append path-only events. Does not store patch, prompt, or file content."
 				},
 				"agentAuditor.allowNetworkAi": {
 					"type": "boolean",
